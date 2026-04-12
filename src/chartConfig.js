@@ -48,6 +48,7 @@ export function renderCharts(timelineData, uniqueCategories, topLocations, sales
       type: 'bar',
       data: { labels, datasets: categoryDatasets },
       options: {
+          maintainAspectRatio: false,
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
@@ -88,6 +89,7 @@ export function renderCharts(timelineData, uniqueCategories, topLocations, sales
           ]
       },
       options: {
+          maintainAspectRatio: false,
           animation: false,
           responsive: true,
           maintainAspectRatio: false,
@@ -122,6 +124,7 @@ export function renderCharts(timelineData, uniqueCategories, topLocations, sales
           ]
       },
       options: {
+          maintainAspectRatio: false,
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
@@ -152,6 +155,7 @@ export function renderCharts(timelineData, uniqueCategories, topLocations, sales
           ]
       },
       options: {
+          maintainAspectRatio: false,
           indexAxis: 'y', // This is the magic for Horizontal Bar Chart
           responsive: true,
           maintainAspectRatio: false,
@@ -183,6 +187,7 @@ export function renderCharts(timelineData, uniqueCategories, topLocations, sales
               }]
           },
           options: {
+              maintainAspectRatio: false,
               responsive: true,
               maintainAspectRatio: false,
               plugins: {

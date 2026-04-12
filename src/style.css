@@ -23,6 +23,8 @@ body, html {
   font-size: 14px;
   height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .top-header {
@@ -115,45 +117,83 @@ body, html {
 
 .dashboard-container {
   display: grid;
-  grid-template-columns: 240px 1fr 280px;
-  height: calc(100vh - 56px);
+  grid-template-columns: 280px 1fr;
+  flex: 1; /* Automatically locks onto available V-height driven by Flex Body */
+  min-height: 0; /* Critical for grid fractional scrolling bounds */
+  overflow: hidden;
 }
 
 /* Base Panel Styling */
-.sidebar, .chart-area, .right-panel {
+.right-panel, .chart-area {
   display: flex;
   flex-direction: column;
   background-color: var(--bbc-panel-bg);
 }
 
-.sidebar {
+.right-panel {
   border-right: 1px solid var(--bbc-border);
   padding: 24px 16px;
   overflow-y: auto;
 }
 
-.right-panel {
-  border-left: 1px solid var(--bbc-border);
-  padding: 24px 20px;
-  overflow-y: auto;
-}
 
-.sidebar-header, .panel-header {
-  font-family: 'Lora', serif;
-  color: var(--bbc-text-primary);
-  font-weight: 600;
-  font-size: 16px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--bbc-brand);
-  margin-bottom: 12px;
-  letter-spacing: 0em;
-}
 
 .filter-header-flex {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 12px;
+}
+
+.filters-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bbc-border);
+  background: var(--bbc-panel-bg);
+  color: var(--bbc-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.filters-collapse-btn:hover {
+  color: var(--bbc-text-primary);
+  border-color: #d8d2cb;
+}
+
+.filters-collapse-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--bbc-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.filters-collapse-icon::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--bbc-text-secondary);
+  border-bottom: 2px solid var(--bbc-text-secondary);
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+
+.filter-section.filters-collapsed {
+  margin-bottom: 12px;
+}
+
+.filter-section.filters-collapsed .filters-collapse-icon::before {
+  transform: rotate(-45deg);
+  margin-top: 0;
 }
 
 .filter-action-btn {
@@ -170,7 +210,69 @@ body, html {
 }
 
 .filter-section {
-  margin-bottom: 24px;
+  margin-bottom: 12px;
+}
+
+.dropdown-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bbc-border);
+  background: #faf9f7;
+  color: var(--bbc-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dropdown-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-track {
+  width: 28px;
+  height: 16px;
+  background: #e7e2dc;
+  border-radius: 999px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.15s ease;
+}
+
+.toggle-thumb {
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  transform: translateX(0);
+  transition: transform 0.15s ease;
+}
+
+.dropdown-toggle input:checked + .toggle-track {
+  background: var(--bbc-brand);
+}
+
+.dropdown-toggle input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(12px);
+}
+
+.toggle-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 /* Custom Dropdown Styling */
@@ -255,58 +357,156 @@ body, html {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: hidden; /* No scroll outside canvas */
+  overflow: hidden; /* Lock scroll to naturally compress grid to viewport */
 }
 
-/* Top visualization toggle styling */
-.view-controls {
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 16px;
   width: 100%;
+  height: 100%; /* Force grid into viewport remaining height */
 }
 
-.beautiful-select {
-  width: 100%;
-  padding: 12px 16px;
-  font-size: 15px;
-  font-weight: 600;
-  border: 1px solid var(--bbc-border);
-  background-color: var(--bbc-panel-bg);
-  color: var(--bbc-text-primary);
-  cursor: pointer;
-  outline: none;
-  font-family: inherit;
-  border-radius: 4px;
+.canvas-container:nth-child(1),
+.canvas-container:nth-child(2) {
+  grid-column: span 3;
 }
 
-.beautiful-select:focus {
-  border-color: var(--bbc-brand);
+.canvas-container:nth-child(3),
+.canvas-container:nth-child(4),
+.canvas-container:nth-child(5) {
+  grid-column: span 2;
 }
 
 .canvas-container {
   background-color: var(--bbc-panel-bg);
   border: 1px solid var(--bbc-border);
-  padding: 24px;
-  flex: 1;
+  padding: 16px 24px; /* Slightly compacting padding to yield to charts */
   display: flex;
   flex-direction: column;
   border-radius: 4px;
-  height: 100%;
+  min-height: 0; /* Allows children flex shrinking */
+  transition: all 0.3s ease;
 }
 
-.view-screen {
-  position: absolute;
+/* Modal Maximize Styles */
+.modal-backdrop {
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9998;
+  display: none;
   opacity: 0;
-  pointer-events: none;
-  z-index: 1;
+  transition: opacity 0.3s ease;
 }
 
-.view-screen.active {
+.modal-backdrop.active {
+  display: block;
   opacity: 1;
-  pointer-events: auto;
-  z-index: 2;
+}
+
+.canvas-container.maximized-chart {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 85vw !important;
+  height: 85vh !important;
+  padding-right: 360px !important; /* Yields a generous 40px visual gap separating the chart from the right-hand sidebar */
+  z-index: 9999;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.maximized-insights-overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100%;
+    background: var(--bbc-panel-bg);
+    border-left: 1px solid var(--bbc-border);
+    border-radius: 0 4px 4px 0;
+    padding: 24px 20px;
+    box-shadow: -4px 0 15px rgba(0,0,0,0.15);
+    z-index: 10;
+    overflow-y: auto;
+    pointer-events: auto;
+    color: var(--bbc-text-primary);
+}
+
+.panel-header {
+  font-family: 'Lora', serif;
+  color: var(--bbc-text-primary);
+  font-weight: 600;
+  font-size: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--bbc-text-primary);
+  margin-bottom: 12px;
+  letter-spacing: 0em;
+}
+
+.metric-card {
+  padding: 16px 8px;
+  border-bottom: 1px solid var(--bbc-border);
+}
+
+.metric-value {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-big {
+  font-family: 'Lora', serif;
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--bbc-text-primary);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.metric-sub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--bbc-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Insight Items */
+.insight-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.insight-number {
+  background-color: var(--bbc-text-primary);
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.insight-item p {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--bbc-text-primary);
+}
+
+.maximized-insights-overlay .insight-item:last-child {
+    margin-bottom: 0px;
 }
 
 .chart-header {
@@ -314,6 +514,30 @@ body, html {
   font-weight: 600;
   color: var(--bbc-text-primary);
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.maximize-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--bbc-text-secondary);
+  transition: color 0.2s;
+  padding: 4px;
+}
+
+.maximize-btn:hover {
+  color: var(--bbc-brand);
+}
+
+.canvas-container.maximized-chart .maximize-btn {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 20;
 }
 
 .chart-wrapper {
@@ -364,8 +588,9 @@ body, html {
 
 .insight-item {
   display: flex;
-  gap: 12px;
-  padding: 16px 8px; /* Alignment indent */
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px; /* Alignment indent */
   border-bottom: 1px solid var(--bbc-border);
 }
 
@@ -389,7 +614,7 @@ body, html {
 
 .insight-item p {
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.4;
   color: var(--bbc-text-primary);
 }
 

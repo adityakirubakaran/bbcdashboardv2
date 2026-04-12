@@ -1,5 +1,5 @@
-import { parseExcel, processData, processSalesData } from './dataParser';
-import { renderCharts } from './chartConfig';
+import { parseExcel, processData, processSalesData } from './dataParser.js';
+import { renderCharts } from './chartConfig.js';
 
 window.appDatasets = [];
 
@@ -85,27 +85,46 @@ function populateFilters(sites, categories) {
         
         item.addEventListener('click', () => {
             item.classList.toggle('selected');
+            syncSelectAllToggles();
             updateDashboard();
         });
         catContainer.appendChild(item);
     });
+
+    syncSelectAllToggles();
+}
+
+function syncSelectAllToggles() {
+    const catToggle = document.getElementById('category-select-all-toggle');
+    const locToggle = document.getElementById('location-select-all-toggle');
+
+    if (catToggle) {
+        const items = Array.from(document.querySelectorAll('#category-filters-list .dropdown-item'));
+        catToggle.checked = items.length > 0 && items.every(el => el.classList.contains('selected'));
+    }
+
+    if (locToggle) {
+        const items = Array.from(document.querySelectorAll('#location-filters-list .dropdown-item'));
+        locToggle.checked = items.length > 0 && items.every(el => el.classList.contains('selected'));
+    }
 }
 
 
 function updateDashboard() {
     if (window.appDatasets.length === 0) {
         noDataPlaceholder.style.display = 'flex';
-        document.getElementById('view-controls').style.display = 'none';
+        const viewControls = document.getElementById('view-controls');
+        if (viewControls) viewControls.style.display = 'none';
         document.getElementById('charts-wrapper').style.display = 'none';
         
         document.getElementById('location-filters-list').innerHTML = '';
         document.getElementById('category-filters-list').innerHTML = '';
         
         // Reset metrics
-        document.getElementById('metric-diversion-rate').textContent = "--%";
-        document.getElementById('metric-total-waste').textContent = "--T";
-        document.getElementById('metric-landfill').textContent = "--T";
-        document.getElementById('insights-container').innerHTML = `<div class="insight-item"><span class="insight-number">1</span><p>Awaiting data upload to generate insights.</p></div>`;
+        document.getElementById('main-diversion-rate').textContent = "--%";
+        document.getElementById('main-total-waste').textContent = "--T";
+        document.getElementById('main-landfill').textContent = "--T";
+        document.getElementById('sidebar-insights-container').innerHTML = `<div class="insight-item"><span class="insight-number">1</span><p>Awaiting data upload to generate insights.</p></div>`;
         return;
     }
 
@@ -156,14 +175,17 @@ function updateDashboard() {
     
     // 3. Update Chart
     noDataPlaceholder.style.display = 'none';
-    document.getElementById('view-controls').style.display = 'flex';
-    document.getElementById('charts-wrapper').style.display = 'flex';
+    document.getElementById('charts-wrapper').style.display = 'grid';
     renderCharts(filteredWasteData.timeline, filteredWasteData.uniqueCategories, filteredWasteData.topLocations, processedSalesData);
 
-    // 4. Update Metrics Box
-    document.getElementById('metric-diversion-rate').textContent = filteredWasteData.metrics.diversionRate.toFixed(1) + "%";
-    document.getElementById('metric-total-waste').textContent = Math.round(filteredWasteData.metrics.totalWaste).toLocaleString() + " T";
-    document.getElementById('metric-landfill').textContent = Math.round(filteredWasteData.metrics.totalLandfill).toLocaleString() + " T";
+    // 4. Record Global Metrics for the Overlay Engine + Unmaximized Sidebar
+    const metricsData = filteredWasteData.metrics || { diversionRate: 0, totalWaste: 0, totalLandfill: 0 };
+    window.currentMetricsData = metricsData;
+    
+    document.getElementById('main-diversion-rate').textContent = metricsData.diversionRate.toFixed(1) + "%";
+    document.getElementById('main-total-waste').textContent = Math.round(metricsData.totalWaste).toLocaleString() + " T";
+    document.getElementById('main-landfill').textContent = Math.round(metricsData.totalLandfill).toLocaleString() + " T";
+
     
     // 5. Update Insights
     window.currentInsightsMap = {
@@ -185,6 +207,70 @@ function updateDashboard() {
     }
     
     renderInsights();
+    renderSidebarInsights();
+}
+
+function renderSidebarInsights() {
+    const container = document.getElementById('sidebar-insights-container');
+    if (!container) return;
+
+    const map = window.currentInsightsMap || {};
+    const chartPriority = [
+        'chart-disposition-diverted',
+        'chart-disposition-detailed',
+        'chart-locations',
+        'chart-category',
+        'chart-sales'
+    ];
+
+    const picked = [];
+    const seen = new Set();
+    const seenTexts = [];
+
+    const normalizeInsight = (t) => {
+        if (typeof t !== 'string') return '';
+        return t
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[“”]/g, '"')
+            .replace(/[‘’]/g, "'")
+            .toLowerCase();
+    };
+
+    const isNearDuplicate = (normalized) => {
+        if (!normalized) return false;
+        for (const prev of seenTexts) {
+            if (prev === normalized) return true;
+            if (prev.includes(normalized) || normalized.includes(prev)) return true;
+        }
+        return false;
+    };
+
+    for (const k of chartPriority) {
+        const arr = map[k] || [];
+        for (const t of arr) {
+            if (typeof t === 'string' && t.trim().length > 0) {
+                const cleaned = t.trim();
+                const key = normalizeInsight(cleaned);
+                if (key && !seen.has(key) && !isNearDuplicate(key)) {
+                    seen.add(key);
+                    seenTexts.push(key);
+                    picked.push(cleaned);
+                    break;
+                }
+            }
+        }
+    }
+
+    const displayInsights = picked.slice(0, 4);
+    if (displayInsights.length === 0) {
+        container.innerHTML = `<div class="insight-item"><span class="insight-number">1</span><p>Awaiting data extraction parameters or threshold events to generate insights.</p></div>`;
+        return;
+    }
+
+    container.innerHTML = displayInsights
+        .map((text, i) => `<div class="insight-item"><span class="insight-number">${i + 1}</span><p>${text}</p></div>`)
+        .join('');
 }
 
 let currentInsightsMap = {
@@ -196,54 +282,94 @@ let currentInsightsMap = {
 };
 window.currentInsightsMap = currentInsightsMap;
 
-function renderInsights() {
-    const container = document.getElementById('insights-container');
-    container.innerHTML = "";
-    
-    let targetId = 'chart-category';
-    const activeViewItem = document.querySelector('#visualization-list .dropdown-item.selected');
-    if (activeViewItem) targetId = activeViewItem.dataset.value;
+let currentlyMaximized = null;
 
-    let displayInsights = window.currentInsightsMap[targetId] || [];
-    displayInsights = displayInsights.slice(0, 2); // Max 2 insights
+function renderInsights() {
+    document.querySelectorAll('.maximized-insights-overlay').forEach(el => el.remove());
+    if (!currentlyMaximized) return;
+
+    const maxContainer = document.getElementById(currentlyMaximized);
+    const overlay = document.createElement('div');
+    overlay.className = 'maximized-insights-overlay';
+    
+    const m = window.currentMetricsData || { diversionRate: 0, totalWaste: 0, totalLandfill: 0 };
+    
+    let htmlBlock = `
+      <div class="panel-section stats-section">
+        <div class="panel-header">Key Metrics</div>
+        
+        <div class="metric-card">
+          <div class="metric-value">
+            <span class="metric-big">${m.diversionRate.toFixed(1)}%</span>
+            <span class="metric-sub">Avg Diversion Rate</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-value">
+            <span class="metric-big">${Math.round(m.totalWaste).toLocaleString()}T</span>
+            <span class="metric-sub">Total Waste Generated</span>
+          </div>
+        </div>
+
+        <div class="metric-card" style="border-bottom: none; margin-bottom: 24px;">
+          <div class="metric-value">
+            <span class="metric-big">${Math.round(m.totalLandfill).toLocaleString()}T</span>
+            <span class="metric-sub">Landfill Waste</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section insights-section">
+        <div class="panel-header" style="margin-top: 10px;">AUTOMATED INSIGHTS</div>
+        <div id="insights-container" style="padding-top: 10px;">
+    `;
+
+    let displayInsights = window.currentInsightsMap[currentlyMaximized] || [];
+    displayInsights = displayInsights.slice(0, 2); 
     
     if (displayInsights.length > 0) {
         displayInsights.forEach((insightText, i) => {
-            const div = document.createElement('div');
-            div.className = 'insight-item';
-            div.innerHTML = `
-                <span class="insight-number">${i + 1}</span>
-                <p>${insightText}</p>
+            htmlBlock += `
+            <div class="insight-item">
+              <span class="insight-number">${i + 1}</span>
+              <p>${insightText}</p>
+            </div>
             `;
-            container.appendChild(div);
         });
     } else {
-        container.innerHTML = "<p>No significant insights found for the current data selection and visualization view.</p>";
+        htmlBlock += `
+            <div class="insight-item">
+              <span class="insight-number">1</span>
+              <p style="color: var(--bbc-text-secondary); font-size: 13px;">Awaiting data extraction parameters or threshold events to generate insights.</p>
+            </div>
+        `;
     }
+    
+    htmlBlock += `</div></div>`;
+    
+    overlay.innerHTML = htmlBlock;
+    maxContainer.appendChild(overlay);
 }
 
-// UI Toggles
-document.getElementById('visualization-dropdown-btn').addEventListener('click', () => {
-    const list = document.getElementById('visualization-list');
-    list.style.display = list.style.display === 'none' ? 'block' : 'none';
-});
-
-document.querySelectorAll('#visualization-list .dropdown-item').forEach(item => {
-    item.addEventListener('click', () => {
-        document.querySelectorAll('#visualization-list .dropdown-item').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
+// Maximize Chart Logic
+document.querySelectorAll('.maximize-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const container = e.target.closest('.canvas-container');
+        const targetId = container.id;
         
-        document.getElementById('visualization-list').style.display = 'none';
-        document.getElementById('current-view-name').textContent = item.textContent;
+        if (container.classList.contains('maximized-chart')) {
+            container.classList.remove('maximized-chart');
+            document.getElementById('modal-backdrop').classList.remove('active');
+            currentlyMaximized = null;
+        } else {
+            document.querySelectorAll('.canvas-container').forEach(el => el.classList.remove('maximized-chart'));
+            container.classList.add('maximized-chart');
+            document.getElementById('modal-backdrop').classList.add('active');
+            currentlyMaximized = targetId;
+        }
         
-        const targetId = item.dataset.value;
-        document.querySelectorAll('.view-screen').forEach(el => {
-            if (el.id === targetId) {
-                el.classList.add('active');
-            } else {
-                el.classList.remove('active');
-            }
-        });
+        renderInsights();
         
         const chartMap = {
             'chart-category': window.char1,
@@ -252,17 +378,34 @@ document.querySelectorAll('#visualization-list .dropdown-item').forEach(item => 
             'chart-disposition-detailed': window.char4,
             'chart-sales': window.char5
         };
-        const activeChart = chartMap[targetId];
+        const activeChart = chartMap[currentlyMaximized || targetId];
         if (activeChart) {
-            setTimeout(() => {
-                activeChart.reset();
-                activeChart.update();
-            }, 15);
+            setTimeout(() => activeChart.resize(), 10);
+            setTimeout(() => activeChart.resize(), 300); // 300ms matches css transition
         }
-        
-        manageFiltersVisibility(targetId);
-        renderInsights(); // Re-render insights natively bound to this newly active view
     });
+});
+
+document.getElementById('modal-backdrop').addEventListener('click', () => {
+    document.querySelectorAll('.canvas-container').forEach(el => el.classList.remove('maximized-chart'));
+    document.getElementById('modal-backdrop').classList.remove('active');
+    
+    const previousTarget = currentlyMaximized;
+    currentlyMaximized = null;
+    renderInsights();
+    
+    const chartMap = {
+        'chart-category': window.char1,
+        'chart-disposition-diverted': window.char2,
+        'chart-locations': window.char3,
+        'chart-disposition-detailed': window.char4,
+        'chart-sales': window.char5
+    };
+    const activeChart = chartMap[previousTarget];
+    if (activeChart) {
+        setTimeout(() => activeChart.resize(), 10);
+        setTimeout(() => activeChart.resize(), 300);
+    }
 });
 
 document.getElementById('category-dropdown-btn').addEventListener('click', () => {
@@ -275,48 +418,49 @@ document.getElementById('location-dropdown-btn').addEventListener('click', () =>
     list.style.display = list.style.display === 'none' ? 'block' : 'none';
 });
 
-function manageFiltersVisibility(viewId) {
-    const defaultFiltersMap = {
-        'chart-category': ['location', 'category'], 
-        'chart-disposition-detailed': ['location'], 
-        'chart-disposition-diverted': ['location', 'category'], 
-        'chart-locations': ['category'], 
-        'chart-sales': [] 
-    };
-    
-    const activeFilters = defaultFiltersMap[viewId] || [];
-    
-    const catSection = document.getElementById('category-dropdown').parentElement;
-    const locSection = document.getElementById('location-dropdown').parentElement;
-    
-    let anyVisible = false;
-    
-    if (activeFilters.includes('category')) {
-        catSection.style.display = 'block';
-        anyVisible = true;
-    } else {
-        catSection.style.display = 'none';
-    }
-    
-    if (activeFilters.includes('location')) {
-        locSection.style.display = 'block';
-        anyVisible = true;
-    } else {
-        locSection.style.display = 'none';
-    }
-    
-    let noFiltersMsg = document.getElementById('no-filters-msg');
-    if (!noFiltersMsg) {
-        noFiltersMsg = document.createElement('p');
-        noFiltersMsg.id = 'no-filters-msg';
-        noFiltersMsg.textContent = 'No filters available for this visualization.';
-        noFiltersMsg.style.color = 'var(--bbc-text-secondary)';
-        noFiltersMsg.style.fontSize = '13px';
-        noFiltersMsg.style.padding = '8px 0';
-        catSection.parentElement.appendChild(noFiltersMsg);
-    }
-    noFiltersMsg.style.display = anyVisible ? 'none' : 'block';
-}
+document.getElementById('filters-collapse-btn').addEventListener('click', () => {
+    const section = document.querySelector('.filter-section');
+    const body = document.getElementById('filters-body');
+    const btn = document.getElementById('filters-collapse-btn');
+    if (!section || !body || !btn) return;
 
-// Init run
-manageFiltersVisibility('chart-category');
+    const willExpand = body.style.display === 'none';
+    body.style.display = willExpand ? 'block' : 'none';
+    section.classList.toggle('filters-collapsed', !willExpand);
+
+    btn.setAttribute('aria-expanded', String(willExpand));
+    const label = btn.querySelector('.filters-collapse-label');
+    if (label) label.textContent = willExpand ? 'Collapse' : 'Expand';
+
+    if (!willExpand) {
+        const catList = document.getElementById('category-filters-list');
+        const locList = document.getElementById('location-filters-list');
+        if (catList) catList.style.display = 'none';
+        if (locList) locList.style.display = 'none';
+    }
+});
+
+document.getElementById('category-select-all-toggle').addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+document.getElementById('location-select-all-toggle').addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+document.getElementById('category-select-all-toggle').addEventListener('change', (e) => {
+    const isOn = e.target.checked;
+    document.querySelectorAll('#category-filters-list .dropdown-item')
+        .forEach(el => el.classList.toggle('selected', isOn));
+    syncSelectAllToggles();
+    updateDashboard();
+});
+
+document.getElementById('location-select-all-toggle').addEventListener('change', (e) => {
+    const isOn = e.target.checked;
+    document.querySelectorAll('#location-filters-list .dropdown-item')
+        .forEach(el => el.classList.toggle('selected', isOn));
+    syncSelectAllToggles();
+    updateDashboard();
+});
+
