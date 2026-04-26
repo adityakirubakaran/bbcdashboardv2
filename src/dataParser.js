@@ -10,14 +10,11 @@ export async function parseExcel(file) {
         const workbook = XLSX.read(data, { type: 'array' });
         
         const sheetName = "Q1,Q2,Q3";
-        // fallback to first sheet if our target doesn't exist
         const targetSheet = workbook.SheetNames.includes(sheetName) ? sheetName : workbook.SheetNames[0];
         
         const sheet = workbook.Sheets[targetSheet];
-        // Parse with header handling
-        const json = XLSX.utils.sheet_to_json(sheet, { defval: 0 }); // defval: 0 handles empty cells nicely for numbers
-        // but wait, some cells might be text. Let's not defval 0 for everything, just clean it up ourselves.
-        // Use header: 1 to get a raw 2D array of cells
+        // We inspect the raw grid first because incoming spreadsheets do not always place headers
+        // on the first row or use a stable schema between waste and sales exports.
         const rawGrid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
         
         let headerRowIdx = -1;
@@ -97,7 +94,7 @@ export async function parseExcel(file) {
 function extractCategories(headers) {
     const upper = headers.map(h => h.toUpperCase());
     
-    // Find the bounds of the actual waste streams
+    // Waste stream columns sit between site metadata and disposal summary columns.
     let startIdx = upper.findIndex(h => h.includes('WASTE STREAM') || h.includes('EWC'));
     if (startIdx === -1) {
         startIdx = upper.findIndex(h => h.includes('BUILDING') || h.includes('POST CODE') || h.includes('SITE'));
@@ -119,7 +116,8 @@ function extractCategories(headers) {
 }
 
 export function processData(rows, headers = [], filters = null) {
-  // Always extract metadata first so UI can build dropdowns
+  // Metadata is collected before filtering so the UI can still render dropdown options even when
+  // the current selection produces an empty result set.
   const uniqueCategories = extractCategories(headers);
   const uniqueSites = new Set();
   
@@ -131,8 +129,6 @@ export function processData(rows, headers = [], filters = null) {
   });
   const siteList = Array.from(uniqueSites).filter(s => s && s.trim().length > 0);
 
-  // If filters object is explicitly passed (meaning we are inside an updateDashboard call),
-  // and the user unselected everything, display zero-data state but KEEP metadata.
   if (filters !== null && (filters.sites.length === 0 || filters.categories.length === 0)) {
        return {
         timeline: [],
@@ -145,7 +141,6 @@ export function processData(rows, headers = [], filters = null) {
       };
   }
 
-  // Create active filter objects based on whether it is null (allow all) or passed
   const activeFilters = filters || { sites: siteList, categories: uniqueCategories };
 
   const monthlyData = {};
@@ -172,10 +167,11 @@ export function processData(rows, headers = [], filters = null) {
     const site = row['SITE'] || row['Site'] || row['site'] || 'Unknown';
     uniqueSites.add(site);
 
-    // Filter skip for site
     if (activeFilters.sites.length > 0 && !activeFilters.sites.includes(site)) return;
     
-    // Mathematical Proportional Subtraction logic for categories
+    // Disposal columns are totals for the whole row, not per-category values. When the user filters
+    // down to specific categories, we scale landfill/diversion totals by that category share so the
+    // charts stay directionally accurate instead of dropping the row entirely.
     let rowCategoryTotalSum = 0;
     let rowCategoryFilteredSum = 0;
     
@@ -187,7 +183,6 @@ export function processData(rows, headers = [], filters = null) {
         }
     });
 
-    // Skip if dynamically this row yielded zero for the requested filters
     if (activeFilters.categories.length > 0 && rowCategoryFilteredSum === 0) return;
 
     let ratio = rowCategoryTotalSum > 0 ? (rowCategoryFilteredSum / rowCategoryTotalSum) : 0;
@@ -229,13 +224,11 @@ export function processData(rows, headers = [], filters = null) {
     monthlyData[monthStr].diverted += diverted;
     monthlyData[monthStr].total += totalGen;
     
-    // Track explicit sub-streams mathematically adjusted
     monthlyData[monthStr].rawAd += ad;
     monthlyData[monthStr].rawIncineration += incineration;
     monthlyData[monthStr].rawRecycled += recycled;
     monthlyData[monthStr].rawLandfill += landfill;
 
-    // Record category specifics for Chart 1
     uniqueCategories.forEach(cat => {
         if (activeFilters.categories.length === 0 || activeFilters.categories.includes(cat)) {
             if (!monthlyData[monthStr].categoryVolumes[cat]) monthlyData[monthStr].categoryVolumes[cat] = 0;
@@ -278,7 +271,6 @@ function generateInsights(timeline, totalWaste, totalLandfill, siteData) {
       return insightsMap;
   }
 
-  // 1. Overall Diversion
   const divRate = ((totalWaste - totalLandfill) / totalWaste) * 100;
   if (divRate > 80) {
       insightsMap['chart-disposition-diverted'].push(`Excellent diversion rate of ${divRate.toFixed(1)}%. The majority of waste is successfully bypassing landfill deposition.`);
@@ -290,7 +282,6 @@ function generateInsights(timeline, totalWaste, totalLandfill, siteData) {
       insightsMap['chart-disposition-diverted'].push(`Average performance with a diversion rate of ${divRate.toFixed(1)}%.`);
   }
 
-  // 2. Trend analysis (Q1/Q2/Q3 spikes)
   if (timeline.length >= 2) {
       const lastMonth = timeline[timeline.length - 1];
       const prevMonth = timeline[timeline.length - 2];
@@ -315,11 +306,11 @@ function generateInsights(timeline, totalWaste, totalLandfill, siteData) {
       const topSites = Object.values(siteData).sort((a, b) => b.total - a.total);
       if (topSites.length > 0) {
           const worstSite = topSites[0];
-          insightsMap['chart-locations'].push(`<strong>${worstSite.site}</strong> is the highest volume location, contributing ${Math.round(worstSite.total).toLocaleString()} T to the footprint.`);
+          insightsMap['chart-locations'].push(`<strong>${worstSite.site}</strong> is the highest volume location, contributing ${Math.round(worstSite.total).toLocaleString()} tonnes to the footprint.`);
       }
       if (topSites.length > 1) {
           const secondSite = topSites[1];
-          insightsMap['chart-locations'].push(`<strong>${secondSite.site}</strong> is the second highest contributor, producing ${Math.round(secondSite.total).toLocaleString()} T.`);
+          insightsMap['chart-locations'].push(`<strong>${secondSite.site}</strong> is the second highest contributor, producing ${Math.round(secondSite.total).toLocaleString()} tonnes.`);
       }
   }
 
@@ -359,7 +350,6 @@ export function processSalesData(rows, headers = []) {
         revenue: salesByCategory[name]
     })).sort((a,b) => b.revenue - a.revenue);
     
-    // Detailed analysis
     const topCategory = categories.length > 0 ? categories[0] : null;
     let topRoute = '';
     let maxRouteRev = 0;

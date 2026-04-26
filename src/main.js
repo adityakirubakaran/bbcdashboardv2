@@ -30,7 +30,7 @@ uploadInput.addEventListener('change', async (e) => {
     alert("There was an error parsing the uploaded file. Please ensure it is the correct format.");
   }
   
-  // reset input so same file can be uploaded if needed
+  // Allow re-uploading the same file without forcing the user to pick a different one first.
   e.target.value = '';
 });
 
@@ -60,7 +60,6 @@ function populateFilters(sites, categories) {
     const locContainer = document.getElementById('location-filters-list');
     const catContainer = document.getElementById('category-filters-list');
     
-    // Clear existing
     if(locContainer) locContainer.innerHTML = '';
     if(catContainer) catContainer.innerHTML = '';
 
@@ -120,15 +119,13 @@ function updateDashboard() {
         document.getElementById('location-filters-list').innerHTML = '';
         document.getElementById('category-filters-list').innerHTML = '';
         
-        // Reset metrics
         document.getElementById('main-diversion-rate').textContent = "--%";
-        document.getElementById('main-total-waste').textContent = "--T";
-        document.getElementById('main-landfill').textContent = "--T";
+        document.getElementById('main-total-waste').textContent = "-- t";
+        document.getElementById('main-landfill').textContent = "-- t";
         document.getElementById('sidebar-insights-container').innerHTML = `<div class="insight-item"><span class="insight-number">1</span><p>Awaiting data upload to generate insights.</p></div>`;
         return;
     }
 
-    // Combine row data by type
     let allWasteRows = [];
     let wasteHeaders = [];
     let allSites = new Set();
@@ -149,17 +146,14 @@ function updateDashboard() {
         }
     });
 
-    // Populate filters only if they haven't been populated with these sets yet
-    // For simplicity, we just rebuild if the UI is completely empty or sizes changed. 
-    // Doing it completely dynamically is tricky without resetting user choices. 
-    // For now we will just populate if it's empty, or append if new.
+    // Filters are only built on first load so we do not wipe out the user's current selections
+    // every time a dataset is added or removed.
     const locContainer = document.getElementById('location-filters-list');
     const catContainer = document.getElementById('category-filters-list');
     if (locContainer.children.length === 0 && allSites.size > 0) {
         populateFilters(Array.from(allSites), Array.from(allCats));
     }
 
-    // 1. Get current filters
     const selectedSites = Array.from(document.querySelectorAll('#location-filters-list .dropdown-item.selected')).map(el => el.dataset.value);
     const selectedCats = Array.from(document.querySelectorAll('#category-filters-list .dropdown-item.selected')).map(el => el.dataset.value);
 
@@ -173,21 +167,20 @@ function updateDashboard() {
         processedSalesData = processSalesData(allSalesRows, salesHeaders);
     }
     
-    // 3. Update Chart
     noDataPlaceholder.style.display = 'none';
     document.getElementById('charts-wrapper').style.display = 'grid';
     renderCharts(filteredWasteData.timeline, filteredWasteData.uniqueCategories, filteredWasteData.topLocations, processedSalesData);
 
-    // 4. Record Global Metrics for the Overlay Engine + Unmaximized Sidebar
+    // Store the latest aggregate values globally because both the sidebar and maximized overlay
+    // read from the same source of truth after chart rerenders.
     const metricsData = filteredWasteData.metrics || { diversionRate: 0, totalWaste: 0, totalLandfill: 0 };
     window.currentMetricsData = metricsData;
     
     document.getElementById('main-diversion-rate').textContent = metricsData.diversionRate.toFixed(1) + "%";
-    document.getElementById('main-total-waste').textContent = Math.round(metricsData.totalWaste).toLocaleString() + " T";
-    document.getElementById('main-landfill').textContent = Math.round(metricsData.totalLandfill).toLocaleString() + " T";
+    document.getElementById('main-total-waste').textContent = Math.round(metricsData.totalWaste).toLocaleString() + " t";
+    document.getElementById('main-landfill').textContent = Math.round(metricsData.totalLandfill).toLocaleString() + " t";
 
     
-    // 5. Update Insights
     window.currentInsightsMap = {
         'chart-category': [],
         'chart-disposition-detailed': [],
@@ -307,15 +300,15 @@ function renderInsights() {
 
         <div class="metric-card">
           <div class="metric-value">
-            <span class="metric-big">${Math.round(m.totalWaste).toLocaleString()}T</span>
-            <span class="metric-sub">Total Waste Generated</span>
+            <span class="metric-big">${Math.round(m.totalWaste).toLocaleString()} t</span>
+            <span class="metric-sub">Total Waste Generated (tonnes)</span>
           </div>
         </div>
 
         <div class="metric-card" style="border-bottom: none; margin-bottom: 24px;">
           <div class="metric-value">
-            <span class="metric-big">${Math.round(m.totalLandfill).toLocaleString()}T</span>
-            <span class="metric-sub">Landfill Waste</span>
+            <span class="metric-big">${Math.round(m.totalLandfill).toLocaleString()} t</span>
+            <span class="metric-sub">Landfill Waste (tonnes)</span>
           </div>
         </div>
       </div>
@@ -352,7 +345,8 @@ function renderInsights() {
     maxContainer.appendChild(overlay);
 }
 
-// Maximize Chart Logic
+// Maximized charts reuse the same Chart.js instances, so we resize after the CSS transition
+// finishes to prevent clipped canvases.
 document.querySelectorAll('.maximize-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const container = e.target.closest('.canvas-container');
@@ -381,7 +375,7 @@ document.querySelectorAll('.maximize-btn').forEach(btn => {
         const activeChart = chartMap[currentlyMaximized || targetId];
         if (activeChart) {
             setTimeout(() => activeChart.resize(), 10);
-            setTimeout(() => activeChart.resize(), 300); // 300ms matches css transition
+            setTimeout(() => activeChart.resize(), 300);
         }
     });
 });
@@ -463,4 +457,3 @@ document.getElementById('location-select-all-toggle').addEventListener('change',
     syncSelectAllToggles();
     updateDashboard();
 });
-
